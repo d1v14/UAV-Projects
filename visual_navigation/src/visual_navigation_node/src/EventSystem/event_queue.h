@@ -1,4 +1,3 @@
-#include <atomic>
 #include <memory>
 #include <array>
 #include <vector>
@@ -6,41 +5,21 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <functional>
+#include "Events/base_event.h"
 
 namespace EventSystem{
 
-    enum class EventType: uint16_t{
-        UNKNOWN = 0,
-        CAMERA_INITIALIZED,
-        IMU_INITIALIZED,
-        RANGE_FINDER_INTIALIZED,
-        UAV_ARMED,
-        UAV_READY,
-        CUSTOM_EVENT_MIN,
-        CUSTOM_EVENT_MAX = std::numeric_limits<std::uint16_t>::max()
-    };
-
-
-    class BaseEvent{
-    public:
-        BaseEvent(EventType event_type):event_type(event_type){};
-
-    public:
-        EventType get_event_type() const {
-            return this->event_type;
-        }
-
-    private:
-        EventType event_type{EventType::UNKNOWN};
-    };
-
     class EventQueue{
     private:
-        using EventVector = std::vector<std::unique_ptr<BaseEvent>>;
+        using Event = std::unique_ptr<BaseEvent>;
+        using EventVector = std::vector<Event>; 
+        using ProcessingMethod = std::function<void(const Event&)>;
+
     public:
         EventQueue(){
             events.reserve(max_events);
-            this->processing_thread = std::thread(&processing_method, this);
+            this->processing_thread = std::thread(&processing_loop, this);
         };
 
         ~EventQueue(){
@@ -81,8 +60,12 @@ namespace EventSystem{
             condition_variable.notify_one();
         }
 
+        void set_processing_method(ProcessingMethod method){
+            this->processing_method = std::move(method);
+        }
+
     private:
-        void processing_method(){
+        void processing_loop(){
             EventVector local_events{};
             local_events.reserve(max_events);
             while(true){
@@ -96,58 +79,26 @@ namespace EventSystem{
                     // Если нет - значит, очередь запустили и там есть ивенты. Под мьютексом муваем вектор в локалку
                     local_events.swap(events);
                 }
-                auto event = local_events.begin();
                 for(auto& event: local_events)
-                    base_events_processing(event);
+                    processing_method(event);
                 local_events.clear();
             }
 
             std::unique_lock<std::mutex> lock{mutex};
             // Допроцессинг ивентов после выхода
             for(auto& event: events)
-                    base_events_processing(event);  
+                processing_method(event);
         }
-
-    private:
-        void base_events_processing(const std::unique_ptr<BaseEvent>& event){
-            auto event_type = event.get()->get_event_type();
-            switch (event_type)
-            {
-            case EventType::UNKNOWN:
-                // Ничего не делаем, поскольку ивент неизвестный
-                break;
-            
-            case EventType::CAMERA_INITIALIZED:
-                // Тут какая то логика при инициализации камеры
-                break;
-
-            case EventType::IMU_INITIALIZED:
-                // Тут какая-то логика при инициализации гироскопа
-                break;
-
-            case EventType::UAV_ARMED:
-                // Тут какая-то логика при успешном арминге
-                break;
-
-            case EventType::UAV_READY:
-                // Тут какая-то логика когда дрон полностью прошел процедуру инициализации
-                break;
-
-            default:
-                // Тут обработка оставшихся ивентов. Потом перенесу.
-            }
-
-        }
-
 
     private:
         bool is_quit_required{false};
-        bool is_working{false};
+        bool is_working{false}; 
         std::mutex mutex{};
         std::condition_variable condition_variable{};
-
         std::thread processing_thread{};
+
         EventVector events{};
+        ProcessingMethod processing_method{};
 
     private:
         uint8_t max_events{100};

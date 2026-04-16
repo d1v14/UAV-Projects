@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdint.h>
 #include <string_view>
 
@@ -5,7 +7,7 @@ namespace EventSystem
 {
     enum class EventType: uint16_t{
     UNKNOWN,
-    START
+    START,
     CAMERA_INITIALIZED,
     IMU_INITIALIZED,
     RANGEFINDER_INTIALIZED,

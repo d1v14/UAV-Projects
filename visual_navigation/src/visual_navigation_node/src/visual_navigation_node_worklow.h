@@ -1,5 +1,7 @@
+#pragma once
 #include "EventSystem/event_queue.h"
 #include "StateSystem/uav_state_machine.h"
+
 class VisualNavigationNodeWorkflow
 {
 public:
@@ -13,12 +15,12 @@ public:
     }
 
     StateSystem::UAVStateMachine& state_machine(){
-        return state_machine;
+        return uav_state_machine;
     }
 
 private:
     void connect_state_machine_to_event_queue(){
-        this->node_event_queue.set_processing_method(uav_state_machine.state_processing_method);
+        this->node_event_queue.set_processing_method([this](const EventSystem::EventQueue::Event& event){this->uav_state_machine.state_processing_method(event);});
     }
 
 private:

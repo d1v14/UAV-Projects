@@ -1,4 +1,7 @@
+#pragma once
+
 #include <stdint.h>
+#include <string_view>
 
 enum class UAV_STATE: uint8_t{
     PREFLIGHT = 0,

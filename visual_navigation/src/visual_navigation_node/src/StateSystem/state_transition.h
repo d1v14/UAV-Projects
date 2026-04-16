@@ -1,3 +1,5 @@
+#pragma once 
+ 
 #include "state_machine_enum.h"
 #include "../EventSystem/Events/base_event.h"
 #include <functional>
@@ -31,7 +33,7 @@ public:
         return [state_before, destination_state, message](){ROS_INFO("[%s -> %s] %s",
             get_uav_state_name(state_before),
             get_uav_state_name(destination_state),
-            message.data())};
+            message.data());};
     }
 
 

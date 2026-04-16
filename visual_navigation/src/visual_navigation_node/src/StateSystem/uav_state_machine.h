@@ -1,3 +1,5 @@
+#pragma once
+
 #include "state_machine_enum.h"
 #include "../EventSystem/event_queue.h"
 #include <map>
@@ -8,7 +10,7 @@ namespace StateSystem{
 
 class UAVStateMachine{
 private:
-    using StateEventConnection = std::pair<UAV_STATE,EventType>;
+    using StateEventConnection = std::pair<UAV_STATE,EventSystem::EventType>;
     using StateTransitionTable = std::map<StateEventConnection, StateTransition>;
 
 public:
@@ -24,12 +26,12 @@ public:
 
     void state_processing_method(const EventSystem::EventQueue::Event& event){
         auto event_type = event->get_event_type();
-        auto transition_to_new_state_by_event = this->transition_table.find({current_state,event_type});
+        auto transition_to_new_state_by_event = this->transition_table.find(std::make_pair(current_state,event_type));
         if(transition_to_new_state_by_event == this->transition_table.end())
             return;
 
-        this->current_state = transition_to_new_state_by_event.do_transition();
-        
+        auto& transition = transition_to_new_state_by_event->second;
+        this->current_state = transition.do_transition();
     }
 
 
@@ -41,8 +43,8 @@ private:
     void initialize_state_transition_table(){ 
         StateTransition preflight_camera_transition{UAV_STATE::PREFLIGHT, 
             UAV_STATE::INITIALIZE_CAMERA, 
-            StateTransition::get_default_state_changing_process(UAV_STATE::PREFLIGHT,UAV_STATE::INITIALIZE_CAMERA, "Leaving preflight state..."),
-            StateTransition::get_default_state_changing_process(UAV_STATE::PREFLIGHT,UAV_STATE::INITIALIZE_CAMERA, "Started camera intialization..."),
+            StateTransition::get_default_state_changing_message(UAV_STATE::PREFLIGHT,UAV_STATE::INITIALIZE_CAMERA, "Leaving preflight state..."),
+            StateTransition::get_default_state_changing_message(UAV_STATE::PREFLIGHT,UAV_STATE::INITIALIZE_CAMERA, "Started camera intialization..."),
             [this](){create_camera_manager();}};
 
         this->add_transition(UAV_STATE::PREFLIGHT, 
@@ -50,8 +52,8 @@ private:
 
         StateTransition camera_rangefinder_transition{UAV_STATE::INITIALIZE_CAMERA, 
             UAV_STATE::INITIALIZE_RANGEFINDER,
-            StateTransition::get_default_state_changing_process(UAV_STATE::INITIALIZE_CAMERA,UAV_STATE::INITIALIZE_RANGEFINDER, "Camera successfully initialized!"),
-            StateTransition::get_default_state_changing_process(UAV_STATE::INITIALIZE_CAMERA,UAV_STATE::INITIALIZE_RANGEFINDER, "Started rangefinder intialization..."),
+            StateTransition::get_default_state_changing_message(UAV_STATE::INITIALIZE_CAMERA,UAV_STATE::INITIALIZE_RANGEFINDER, "Camera successfully initialized!"),
+            StateTransition::get_default_state_changing_message(UAV_STATE::INITIALIZE_CAMERA,UAV_STATE::INITIALIZE_RANGEFINDER, "Started rangefinder intialization..."),
             [this](){create_rangefinder_manager();}};
 
         this->add_transition(UAV_STATE::INITIALIZE_CAMERA, 
@@ -59,17 +61,17 @@ private:
 
         StateTransition rangefinder_imu_transition{UAV_STATE::INITIALIZE_RANGEFINDER, 
             UAV_STATE::INITIALIZE_IMU, 
-            StateTransition::get_default_state_changing_process(UAV_STATE::INITIALIZE_RANGEFINDER,UAV_STATE::INITIALIZE_IMU, "Rangefinder successfully initialized!"),
-            StateTransition::get_default_state_changing_process(UAV_STATE::INITIALIZE_RANGEFINDER,UAV_STATE::INITIALIZE_IMU, "Started IMU intialization..."),
+            StateTransition::get_default_state_changing_message(UAV_STATE::INITIALIZE_RANGEFINDER,UAV_STATE::INITIALIZE_IMU, "Rangefinder successfully initialized!"),
+            StateTransition::get_default_state_changing_message(UAV_STATE::INITIALIZE_RANGEFINDER,UAV_STATE::INITIALIZE_IMU, "Started IMU intialization..."),
             [this](){create_imu_manager();}};
 
         this->add_transition(UAV_STATE::INITIALIZE_RANGEFINDER, 
-            EventSystem::EventType::RANGEFINDER_INITIALIZED, std::move(rangefinder_imu_transition));
+            EventSystem::EventType::RANGEFINDER_INTIALIZED, std::move(rangefinder_imu_transition));
 
         StateTransition imu_arming_transition{UAV_STATE::INITIALIZE_IMU, 
             UAV_STATE::ARMING, 
-            StateTransition::get_default_state_changing_process(UAV_STATE::INITIALIZE_IMU,UAV_STATE::ARMING, "IMU successfully initialized!"),
-            StateTransition::get_default_state_changing_process(UAV_STATE::INITIALIZE_IMU,UAV_STATE::ARMING, "Start UAV arming..."),
+            StateTransition::get_default_state_changing_message(UAV_STATE::INITIALIZE_IMU,UAV_STATE::ARMING, "IMU successfully initialized!"),
+            StateTransition::get_default_state_changing_message(UAV_STATE::INITIALIZE_IMU,UAV_STATE::ARMING, "Start UAV arming..."),
             [this](){create_uav_controller();}};
 
         this->add_transition(UAV_STATE::INITIALIZE_IMU, 
@@ -77,8 +79,8 @@ private:
 
         StateTransition arming_takeoff_transition{UAV_STATE::ARMING, 
             UAV_STATE::TAKEOFF, 
-            StateTransition::get_default_state_changing_process(UAV_STATE::ARMING,UAV_STATE::TAKEOFF, "UAV succcessfully armed!"),
-            StateTransition::get_default_state_changing_process(UAV_STATE::ARMING,UAV_STATE::TAKEOFF, "Starting UAV takeoff..."),
+            StateTransition::get_default_state_changing_message(UAV_STATE::ARMING,UAV_STATE::TAKEOFF, "UAV succcessfully armed!"),
+            StateTransition::get_default_state_changing_message(UAV_STATE::ARMING,UAV_STATE::TAKEOFF, "Starting UAV takeoff..."),
             [this](){do_takeoff();}};  
 
         this->add_transition(UAV_STATE::ARMING, 
@@ -86,8 +88,8 @@ private:
 
         StateTransition takeoff_ready_transition{UAV_STATE::TAKEOFF, 
             UAV_STATE::READY, 
-            StateTransition::get_default_state_changing_process(UAV_STATE::TAKEOFF,UAV_STATE::READY, "UAV successfully takeoff!"),
-            StateTransition::get_default_state_changing_process(UAV_STATE::TAKEOFF,UAV_STATE::READY, "UAV ready for work!"),
+            StateTransition::get_default_state_changing_message(UAV_STATE::TAKEOFF,UAV_STATE::READY, "UAV successfully takeoff!"),
+            StateTransition::get_default_state_changing_message(UAV_STATE::TAKEOFF,UAV_STATE::READY, "UAV ready for work!"),
             [this](){create_visual_navigation_pipeline();}}; 
         
         this->add_transition(UAV_STATE::TAKEOFF, 

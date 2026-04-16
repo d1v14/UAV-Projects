@@ -1,3 +1,5 @@
+#pragma once
+
 #include <memory>
 #include <array>
 #include <vector>
@@ -11,7 +13,7 @@
 namespace EventSystem{
 
     class EventQueue{
-    private:
+    public:
         using Event = std::unique_ptr<BaseEvent>;
         using EventVector = std::vector<Event>; 
         using ProcessingMethod = std::function<void(const Event&)>;
@@ -19,7 +21,7 @@ namespace EventSystem{
     public:
         EventQueue(){
             events.reserve(max_events);
-            this->processing_thread = std::thread(&processing_loop, this);
+            this->processing_thread = std::thread(&EventQueue::processing_loop, this);
         };
 
         ~EventQueue(){

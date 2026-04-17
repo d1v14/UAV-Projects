@@ -13,8 +13,14 @@ include
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(visual_navigation_executable src/visual_navigation_node.cpp)
-target_link_libraries(visual_navigation_executable
+add_executable(visual_navigation_executable 
+              src/visual_navigation_node.cpp 
+              src/Managers/camera_manager.cpp
+              src/Managers/rangefinder_manager.cpp
+              src/Managers/imu_manager.cpp
+              src/Managers/flight_manager.cpp
+              )
+target_link_libraries(visual_navigation_executable   
   ${catkin_LIBRARIES}
 )
 set_target_properties(visual_navigation_executable PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CATKIN_DEVEL_PREFIX}/lib/${PROJECT_NAME})

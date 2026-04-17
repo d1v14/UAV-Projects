@@ -26,13 +26,14 @@ public:
         state_leave_method();
         state_enter_method();
         transition_method();
+        return this->destination_state;
     }
 
 public:
     static StateChangingMethod get_default_state_changing_message(UAV_STATE state_before, UAV_STATE destination_state, std::string_view message){
         return [state_before, destination_state, message](){ROS_INFO("[%s -> %s] %s",
-            get_uav_state_name(state_before),
-            get_uav_state_name(destination_state),
+            get_uav_state_name(state_before).data(),
+            get_uav_state_name(destination_state).data(),
             message.data());};
     }
 

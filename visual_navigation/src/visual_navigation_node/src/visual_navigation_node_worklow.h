@@ -10,17 +10,17 @@ public:
     }
 
 public:
-    EventSystem::EventQueue& event_queue(){
+    static EventSystem::EventQueue& event_queue(){
         return node_event_queue;
     }
 
-    StateSystem::UAVStateMachine& state_machine(){
+    static StateSystem::UAVStateMachine& state_machine(){
         return uav_state_machine;
     }
 
 private:
-    void connect_state_machine_to_event_queue(){
-        this->node_event_queue.set_processing_method([this](const EventSystem::EventQueue::Event& event){this->uav_state_machine.state_processing_method(event);});
+    static void connect_state_machine_to_event_queue(){
+        node_event_queue.set_processing_method([](const EventSystem::EventQueue::Event& event){uav_state_machine.state_processing_method(event);});
     }
 
 private:

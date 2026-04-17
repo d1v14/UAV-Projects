@@ -1,5 +1,4 @@
 #!/bin/bash
-
 cd /home/$USER/UAV-Projects/visual_navigation
 source /opt/ros/noetic/setup.bash
 source devel/setup.bash
@@ -8,4 +7,4 @@ export ROS_PACKAGE_PATH=/home/$USER/PX4-Autopilot:/home/$USER/PX4-Autopilot/Tool
 roslaunch px4 visual_navigation_test.launch &
 sleep 5
 rosrun visual_navigation_node visual_navigation_executable
-wait
+wait 

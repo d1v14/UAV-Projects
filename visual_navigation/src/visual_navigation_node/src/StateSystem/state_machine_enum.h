@@ -13,7 +13,7 @@ enum class UAV_STATE: uint8_t{
     READY
 };
 
-std::string_view get_uav_state_name(UAV_STATE event_type){
+inline std::string_view get_uav_state_name(UAV_STATE event_type){
         switch (event_type)
         {
         case UAV_STATE::PREFLIGHT:
@@ -36,5 +36,6 @@ std::string_view get_uav_state_name(UAV_STATE event_type){
             
         case UAV_STATE::READY:
             return "UAV READY STATE";
-    }
+        }
+    return {};
 }

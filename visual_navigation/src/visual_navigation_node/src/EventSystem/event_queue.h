@@ -72,8 +72,8 @@ namespace EventSystem{
             local_events.reserve(max_events);
             while(true){
                 // Лочим мьютекс и отдаем его в кондишн чтобы, ждать пока мы полностью не выйдем или пока не в очереди не появится ивент и работа не будет запущена
-                std::unique_lock<std::mutex> lock{mutex};
                 {
+                    std::unique_lock<std::mutex> lock{mutex};
                     condition_variable.wait(lock,[this](){return this->is_quit_required || ( this->is_working && !this->events.empty());});
                     // Если вышли из кондишна по окончанию работы - вываливаемся из цикла
                     if(this->is_quit_required)

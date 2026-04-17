@@ -5,6 +5,10 @@
 #include <map>
 #include "state_transition.h"
 #include <optional>
+#include "../Managers/camera_manager.h"
+#include "../Managers/rangefinder_manager.h"
+#include "../Managers/imu_manager.h"
+#include "../Managers/flight_manager.h"
 
 namespace StateSystem{
 
@@ -45,7 +49,7 @@ private:
             UAV_STATE::INITIALIZE_CAMERA, 
             StateTransition::get_default_state_changing_message(UAV_STATE::PREFLIGHT,UAV_STATE::INITIALIZE_CAMERA, "Leaving preflight state..."),
             StateTransition::get_default_state_changing_message(UAV_STATE::PREFLIGHT,UAV_STATE::INITIALIZE_CAMERA, "Started camera intialization..."),
-            [this](){create_camera_manager();}};
+            [this](){create_camera_manager();}};    
 
         this->add_transition(UAV_STATE::PREFLIGHT, 
             EventSystem::EventType::START, std::move(preflight_camera_transition));
@@ -101,19 +105,20 @@ private:
     }
 
     void create_camera_manager(){
-        ROS_INFO("CREATING CAMERA MANAGER");
+        this->camera_manager = Managers::CameraManager();
     }
 
     void create_rangefinder_manager(){
-        ROS_INFO("CREATING RANGEFINDER MANAGER");
+        this->rangefinder_manager = Managers::RangefinderManager();
     }
 
     void create_imu_manager(){
-        ROS_INFO("CREATING IMU MANAGER");
+        this->imu_manager = Managers::IMUManager();
     }
 
     void create_uav_controller(){
-        ROS_INFO("CREATING UAV CONTROLLER");
+        this->flight_manager = Managers::FlightManager();
+        this->flight_manager->arm();
     }
 
     void do_takeoff(){
@@ -128,6 +133,12 @@ private:
     UAV_STATE current_state{UAV_STATE::PREFLIGHT};
     static inline StateTransitionTable transition_table{};
 
+
+private:
+    std::optional<Managers::CameraManager> camera_manager{std::nullopt};
+    std::optional<Managers::RangefinderManager> rangefinder_manager{std::nullopt};
+    std::optional<Managers::IMUManager> imu_manager{std::nullopt};
+    std::optional<Managers::FlightManager> flight_manager{std::nullopt};
 };
 
 }

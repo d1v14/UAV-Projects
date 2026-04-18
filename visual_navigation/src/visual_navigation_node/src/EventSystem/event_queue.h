@@ -21,7 +21,6 @@ namespace EventSystem{
     public:
         EventQueue(){
             events.reserve(max_events);
-            this->processing_thread = std::thread(&EventQueue::processing_loop, this);
         };
 
         ~EventQueue(){
@@ -40,6 +39,9 @@ namespace EventSystem{
     public:
         void start(){
             std::unique_lock<std::mutex> lock{mutex};
+            if(!this->processing_thread.joinable())
+                this->processing_thread = std::thread(&EventQueue::processing_loop, this);
+                
             this->is_working = true;
             condition_variable.notify_one();
         }

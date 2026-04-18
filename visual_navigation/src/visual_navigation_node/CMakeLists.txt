@@ -18,7 +18,7 @@ add_executable(visual_navigation_executable
               src/Managers/camera_manager.cpp
               src/Managers/rangefinder_manager.cpp
               src/Managers/imu_manager.cpp
-              src/Managers/flight_manager.cpp
+              src/Managers/FlightManager/flight_manager.cpp
               )
 target_link_libraries(visual_navigation_executable   
   ${catkin_LIBRARIES}

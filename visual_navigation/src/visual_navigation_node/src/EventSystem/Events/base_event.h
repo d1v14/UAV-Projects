@@ -2,17 +2,15 @@
 
 #include <stdint.h>
 #include <string_view>
+#include <limits>
 
 namespace EventSystem 
 {
-    enum class EventType: uint16_t{
-    UNKNOWN,
-    START,
-    CAMERA_INITIALIZED,
-    IMU_INITIALIZED,
-    RANGEFINDER_INTIALIZED,
-    UAV_ARMED,
-    UAV_READY
+    using event_type_underlying_type = uint16_t;
+    
+    enum class EventType: event_type_underlying_type{
+        EVENT_TYPE_0,
+        EVETN_TYPE_MAX = std::numeric_limits<event_type_underlying_type>::max()
     };
 
     // std::string_view get_event_name(EventType event_type){
@@ -45,6 +43,6 @@ namespace EventSystem
             return this->event_type;    
         }
     private:
-        EventType event_type{EventType::UNKNOWN};
+        EventType event_type{EventType::EVENT_TYPE_0};
     };
 }

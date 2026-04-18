@@ -1,10 +1,14 @@
 #!/bin/bash
+killall -9 gzserver gzclient rosmaster px4 2>/dev/null
+export ROS_IP=127.0.0.1
+export ROS_HOSTNAME=localhost
+export ROS_MASTER_URI=http://localhost:11311
+
 cd /home/$USER/UAV-Projects/visual_navigation
 source /opt/ros/noetic/setup.bash
 source devel/setup.bash
 source /home/$USER/PX4-Autopilot/Tools/setup_gazebo.bash /home/$USER/PX4-Autopilot /home/$USER/PX4-Autopilot/build/px4_sitl_default > /dev/null
 export ROS_PACKAGE_PATH=/home/$USER/PX4-Autopilot:/home/$USER/PX4-Autopilot/Tools/sitl_gazebo:$ROS_PACKAGE_PATH
-roslaunch px4 visual_navigation_test.launch &
-sleep 5
-rosrun visual_navigation_node visual_navigation_executable
+roslaunch visual_navigation_node visual_navigation_node.launch  
+sleep 10
 wait 

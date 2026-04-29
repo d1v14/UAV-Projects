@@ -4,6 +4,9 @@
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/CommandTOL.h>
 #include <mavros_msgs/State.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <mavros_msgs/SetMode.h>
+
 #include <optional>
 #include <mavros_msgs/ParamSet.h>
 #include "../../UAVEvents/uav_event_enum.h"
@@ -15,6 +18,7 @@
 #include "Events/offboard_enabled_event.h"
 #include "Events/uav_ready_event.h"
 #include "Events/takeoff_done_event.h"
+#include "Events/position_sender_created_event.h"
 #include "../../StateSystem/state_machine.h"
 
 namespace Managers{
@@ -27,6 +31,7 @@ namespace Managers{
         ~FlightManager() = default;
 
     public:
+        void initialize_position_sender();
         void disable_rc_control();
         void enable_offboard();
         void do_arm();
@@ -37,6 +42,8 @@ namespace Managers{
     private:
         void initialize();
         void state_callback(const mavros_msgs::StateConstPtr& state_msg);
+        void current_position_callback(const geometry_msgs::PoseStampedConstPtr& msg);
+        void timer_callback(const ros::TimerEvent& event);
 
     
     private:
@@ -65,8 +72,11 @@ namespace Managers{
         }
 
         void initialize_state_transition_table(){ 
-            this->add_transition(FLIGHT_MANAGER_STATE::CREATED,FLIGHT_MANAGER_STATE::DISABLING_RC, FLIGHT_MANAGER_EVENT::FLIGHT_MANAGER_CREATED, "Leaving flight manager created state...", "Started rc disabling...",
-                [this](){disable_rc_control();});
+            this->add_transition(FLIGHT_MANAGER_STATE::CREATED,FLIGHT_MANAGER_STATE::START_POSITION_SENDER, FLIGHT_MANAGER_EVENT::FLIGHT_MANAGER_CREATED, "Leaving flight manager created state...", "Started position sender initializing...",
+                [this](){initialize_position_sender();});
+
+            this->add_transition(FLIGHT_MANAGER_STATE::START_POSITION_SENDER,FLIGHT_MANAGER_STATE::DISABLING_RC, FLIGHT_MANAGER_EVENT::POSITION_SENDER_CREATED, "Leaving initializing position sender state...", "Started rc disabling...",
+                [this](){disable_rc_control();});  
 
             this->add_transition(FLIGHT_MANAGER_STATE::DISABLING_RC,FLIGHT_MANAGER_STATE::ENABLING_OFFBOARD, FLIGHT_MANAGER_EVENT::RC_DISABLED, "RC successfully disabled!", "Started offboard enabling..."
                 ,[this](){enable_offboard();});
@@ -87,8 +97,18 @@ namespace Managers{
 
     private:
         ros::Subscriber state_subscriber{};
-        ros::ServiceClient takeoff_client{};
         std::optional<mavros_msgs::State> current_state{std::nullopt};
+
+        ros::Publisher destination_position_publisher;
+        ros::Subscriber current_position_subscriber;
+        ros::Timer offboard_timer;
+
+        std::optional<geometry_msgs::PoseStamped> current_position; 
+        std::optional<geometry_msgs::PoseStamped> destination_position; 
+
+        std::optional<ros::ServiceClient> takeoff_client{};
+        std::optional<ros::ServiceClient> arming_client{};
+        std::optional<ros::ServiceClient> set_mode_client{};
         
     private:
         static constexpr const uint8_t takeoff_altitude{10};

@@ -27,7 +27,7 @@ public:
         auto transition_to_new_state_by_event = this->transition_table.find(std::make_pair(current_state,event_type));
         if(transition_to_new_state_by_event == this->transition_table.end())
             return;
-
+    
         auto& transition = transition_to_new_state_by_event->second;
         this->current_state = transition.do_transition();
     }

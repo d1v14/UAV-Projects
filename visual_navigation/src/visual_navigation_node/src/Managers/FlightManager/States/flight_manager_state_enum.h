@@ -7,6 +7,7 @@
 
 enum class FLIGHT_MANAGER_STATE: StateSystem::state_underlying_type{
     CREATED = static_cast<StateSystem::state_underlying_type>(StateSystem::STATE::STATE_0),
+    START_POSITION_SENDER,
     DISABLING_RC,
     ENABLING_OFFBOARD,
     ARMING,
@@ -22,6 +23,9 @@ inline std::string_view get_flight_manager_state_string_presentation(FLIGHT_MANA
 
         case FLIGHT_MANAGER_STATE::DISABLING_RC:
             return "UAV DISABLING RC STATE";
+
+        case FLIGHT_MANAGER_STATE::START_POSITION_SENDER:
+            return "UAV STARTING POSITION SENDER";
 
         case FLIGHT_MANAGER_STATE::ENABLING_OFFBOARD:
             return "UAV ENABLING OFFBOARD STATE";

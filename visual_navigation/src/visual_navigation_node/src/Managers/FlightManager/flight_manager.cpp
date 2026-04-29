@@ -81,6 +81,7 @@ void Managers::FlightManager::notify_uav_ready()
 
 void Managers::FlightManager::initialize()  
 {   
+    ros::Duration(3.0).sleep(); 
     initialize_state_transition_table();
     this->event_queue.set_processing_method([this](const EventSystem::EventQueue::Event& event){this->state_machine.state_processing_method(event);});
     this->event_queue.start();

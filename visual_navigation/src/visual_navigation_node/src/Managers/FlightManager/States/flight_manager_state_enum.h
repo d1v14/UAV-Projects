@@ -12,7 +12,8 @@ enum class FLIGHT_MANAGER_STATE: StateSystem::state_underlying_type{
     ENABLING_OFFBOARD,
     ARMING,
     TAKEOFF,
-    READY
+    READY,
+    LANDING
 };
 
 inline std::string_view get_flight_manager_state_string_presentation(FLIGHT_MANAGER_STATE event_type){

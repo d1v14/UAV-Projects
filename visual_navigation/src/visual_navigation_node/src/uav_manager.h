@@ -8,6 +8,7 @@
 #include "Managers/rangefinder_manager.h"
 #include "Managers/imu_manager.h"
 #include "Managers/FlightManager/flight_manager.h"
+#include "Managers/navigation_manager.h"
 #include "StateSystem/state_machine.h"
 
 class UAVManager{
@@ -55,6 +56,15 @@ private:
             
         this->add_transition(UAV_STATE::INITIALIZE_IMU,UAV_STATE::INITIALIZE_FLIGHT_MANAGER, UAV_EVENT::IMU_INITIALIZED, "IMU successfully initialized!", "Started flight manager initializing...",
             [this](){create_flight_manager();});
+
+        this->add_transition(UAV_STATE::INITIALIZE_FLIGHT_MANAGER,UAV_STATE::TAKEOFF, UAV_EVENT::FLIGHT_MANAGER_INITIALIZED, "Flight manager successfully initialized!", "Starting takeoff...",
+            [this](){do_takeoff();});    
+
+        this->add_transition(UAV_STATE::TAKEOFF,UAV_STATE::INITIALIZE_NAVIGATION_MANAGER, UAV_EVENT::TAKEOFF_DONE, "Takeoff successfully done!", "Started navigation manager initializing...",
+            [this](){create_navigation_manager();});      
+            
+        this->add_transition(UAV_STATE::INITIALIZE_NAVIGATION_MANAGER,UAV_STATE::WORKING, UAV_EVENT::NAVIGATION_MANAGER_INITIALIZED, "Navigation manager successfully initialized!", "Working...",
+            [this](){set_working_state();});     
     }
 
     void create_camera_manager(){
@@ -73,8 +83,17 @@ private:
         this->flight_manager.emplace();
     }
 
-    void create_visual_navigation_pipeline(){
-        ROS_INFO("CREATING VISUAL NAVIGATION PIPELINE");
+    void do_takeoff(){
+        this->flight_manager->do_takeoff();
+    }
+
+    void create_navigation_manager(){
+        ROS_INFO("CREATING NAVIGATION MANAGER");
+        this->navigation_manager.emplace();
+    }
+
+    void set_working_state(){
+        ROS_INFO("SETTING WORKING STATE");
     }
 
 private:
@@ -85,5 +104,6 @@ private:
     std::optional<Managers::RangefinderManager> rangefinder_manager{std::nullopt};
     std::optional<Managers::IMUManager> imu_manager{std::nullopt};
     std::optional<Managers::FlightManager> flight_manager{std::nullopt};
+    std::optional<Managers::NavigationManager> navigation_manager{std::nullopt};
 };
 

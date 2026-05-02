@@ -25,7 +25,7 @@ void Managers::RangefinderManager::rangefinder_callback(const sensor_msgs::Range
     }
 
     bool after_message_state = this->min_range && this->max_range && this->range;
-
+ 
     if(before_message_state != after_message_state)
         after_message_state ? VisualNavigationNodeWorkflow::event_queue().push_event(std::make_unique<EventSystem::RangeFinderInitializedEvent>()) : void();
 }

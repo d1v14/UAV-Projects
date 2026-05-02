@@ -50,7 +50,7 @@ void Managers::FlightManager::enable_offboard()
     }
 }
 
-void Managers::FlightManager::do_arm()
+void Managers::FlightManager::arm()
 {
     if(!arming_client)
     {
@@ -67,6 +67,11 @@ void Managers::FlightManager::do_arm()
 
 void Managers::FlightManager::do_takeoff()
 {
+    this->event_queue.push_event(std::make_unique<DoTakeoffEvent>());   
+}
+
+void Managers::FlightManager::takeoff()
+{
     ROS_INFO("STARTING TAKEOFF");
     auto takeoff_position = *current_position;
     takeoff_position.pose.position.z = takeoff_altitude;
@@ -74,9 +79,9 @@ void Managers::FlightManager::do_takeoff()
     ROS_INFO("TAKEOFF: DESTINATION POSITION GOT ALTITUDE %d",takeoff_altitude);
 }
 
-void Managers::FlightManager::notify_uav_ready()
+void Managers::FlightManager::notify_takeoff_done()
 {
-    ROS_INFO("NOTIFYING UAV READY");
+    VisualNavigationNodeWorkflow::event_queue().push_event(std::make_unique<EventSystem::TakeoffDoneEvent>());
 }
 
 void Managers::FlightManager::initialize()  
@@ -94,7 +99,7 @@ void Managers::FlightManager::state_callback(const mavros_msgs::StateConstPtr &s
 {
     if (!current_state) {
         current_state = *state_msg;
-        this->event_queue.push_event(std::make_unique<FlightManagerInitilizedEvent>());
+        VisualNavigationNodeWorkflow::event_queue().push_event(std::make_unique<EventSystem::FlightManagerInitializedEvent>());
         return;
     }
 
@@ -119,6 +124,23 @@ void Managers::FlightManager::state_callback(const mavros_msgs::StateConstPtr &s
 void Managers::FlightManager::current_position_callback(const geometry_msgs::PoseStampedConstPtr &msg)
 {
     this->current_position = *msg;
+    auto flight_manger_state = this->get_uav_state();
+    switch (flight_manger_state)
+    {
+        case FLIGHT_MANAGER_STATE::TAKEOFF:
+        {
+            auto altitude_error = std::abs(current_position->pose.position.z - destination_position->pose.position.z);
+            if(altitude_error < position_error)
+            {
+                ROS_INFO("SUCCESFULLY TAKEOFF");
+                this->event_queue.push_event(std::make_unique<TakeoffDoneEvent>());
+            } 
+        }
+        break;
+    
+    default:
+        break;
+    }
 }
 
 void Managers::FlightManager::timer_callback(const ros::TimerEvent &event){

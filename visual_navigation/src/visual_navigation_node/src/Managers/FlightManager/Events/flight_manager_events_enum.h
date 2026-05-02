@@ -2,7 +2,7 @@
 #include "../../../EventSystem/Events/base_event.h"
 
 enum class FLIGHT_MANAGER_EVENT: EventSystem::event_type_underlying_type{
-    FLIGHT_MANAGER_CREATED = static_cast<EventSystem::event_type_underlying_type>(EventSystem::EventType::EVENT_TYPE_0),
+    DO_TAKEOFF = static_cast<EventSystem::event_type_underlying_type>(EventSystem::EventType::EVENT_TYPE_0),
     POSITION_SENDER_CREATED,
     RC_DISABLED,
     OFFBOARD_ENABLED,

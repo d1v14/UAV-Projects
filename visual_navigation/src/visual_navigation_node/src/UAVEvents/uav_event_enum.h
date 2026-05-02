@@ -7,7 +7,9 @@ enum class UAV_EVENT: EventSystem::event_type_underlying_type{
     CAMERA_INITIALIZED,
     IMU_INITIALIZED,
     RANGEFINDER_INTIALIZED,
-    UAV_READY
+    FLIGHT_MANAGER_INITIALIZED,
+    TAKEOFF_DONE,
+    NAVIGATION_MANAGER_INITIALIZED
 };
 
 inline EventSystem::EventType convert_uav_event_type_to_base_event_type(UAV_EVENT event){

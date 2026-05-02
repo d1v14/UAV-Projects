@@ -13,13 +13,17 @@
 #include "States/flight_manager_state_enum.h"
 #include "Events/flight_manager_events_enum.h"
 #include "Events/uav_armed_event.h"
-#include "Events/flight_manager_initialized_event.h"
+#include "Events/do_takeoff_event.h"
 #include "Events/rc_control_disabled_event.h"
 #include "Events/offboard_enabled_event.h"
 #include "Events/uav_ready_event.h"
 #include "Events/takeoff_done_event.h"
 #include "Events/position_sender_created_event.h"
 #include "../../StateSystem/state_machine.h"
+#include "../../UAVEvents/takeoff_done_event.h"
+
+
+#include "../../UAVEvents/flight_manager_initialized_event.h"
 
 namespace Managers{
 
@@ -31,19 +35,20 @@ namespace Managers{
         ~FlightManager() = default;
 
     public:
-        void initialize_position_sender();
-        void disable_rc_control();
-        void enable_offboard();
-        void do_arm();
         void do_takeoff();
-        void notify_uav_ready();
-
-
+        
     private:
         void initialize();
         void state_callback(const mavros_msgs::StateConstPtr& state_msg);
         void current_position_callback(const geometry_msgs::PoseStampedConstPtr& msg);
         void timer_callback(const ros::TimerEvent& event);
+        
+        void initialize_position_sender();
+        void disable_rc_control();
+        void enable_offboard();
+        void arm();
+        void takeoff();
+        void notify_takeoff_done();
 
     
     private:
@@ -71,8 +76,8 @@ namespace Managers{
             this->state_machine.add_transition(flight_manager_before_in_base_state, flight_manager_event_type_in_base_event_type, std::move(transition));
         }
 
-        void initialize_state_transition_table(){ 
-            this->add_transition(FLIGHT_MANAGER_STATE::CREATED,FLIGHT_MANAGER_STATE::START_POSITION_SENDER, FLIGHT_MANAGER_EVENT::FLIGHT_MANAGER_CREATED, "Leaving flight manager created state...", "Started position sender initializing...",
+        void initialize_state_transition_table(){
+            this->add_transition(FLIGHT_MANAGER_STATE::CREATED,FLIGHT_MANAGER_STATE::START_POSITION_SENDER, FLIGHT_MANAGER_EVENT::DO_TAKEOFF, "Leaving flight manager created state...", "Started position sender initializing...",
                 [this](){initialize_position_sender();});
 
             this->add_transition(FLIGHT_MANAGER_STATE::START_POSITION_SENDER,FLIGHT_MANAGER_STATE::DISABLING_RC, FLIGHT_MANAGER_EVENT::POSITION_SENDER_CREATED, "Leaving initializing position sender state...", "Started rc disabling...",
@@ -82,13 +87,13 @@ namespace Managers{
                 ,[this](){enable_offboard();});
 
             this->add_transition(FLIGHT_MANAGER_STATE::ENABLING_OFFBOARD,FLIGHT_MANAGER_STATE::ARMING, FLIGHT_MANAGER_EVENT::OFFBOARD_ENABLED, "Offboard successfully enabeld!", "Started UAV arming...",
-                [this](){do_arm();});
+                [this](){arm();});
 
             this->add_transition(FLIGHT_MANAGER_STATE::ARMING,FLIGHT_MANAGER_STATE::TAKEOFF, FLIGHT_MANAGER_EVENT::ARMED, "UAV successfully armed!", "Started UAV takeoff...",
-                [this](){do_takeoff();});
+                [this](){takeoff();});
 
             this->add_transition(FLIGHT_MANAGER_STATE::TAKEOFF,FLIGHT_MANAGER_STATE::READY, FLIGHT_MANAGER_EVENT::TAKEOFF_DONE, "UAV successfully takeoff!", "Flight manager preparing done!",
-                [this](){notify_uav_ready();});
+                [this](){notify_takeoff_done();});
         }
 
     private:
@@ -112,5 +117,6 @@ namespace Managers{
         
     private:
         static constexpr const uint8_t takeoff_altitude{10};
+        static constexpr const float position_error{0.5};
     };
 }

@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
+  message_filters
 )
 
 include_directories(
@@ -19,6 +20,7 @@ add_executable(visual_navigation_executable
               src/Managers/rangefinder_manager.cpp
               src/Managers/imu_manager.cpp
               src/Managers/FlightManager/flight_manager.cpp
+              src/Managers/navigation_manager.cpp
               )
 target_link_libraries(visual_navigation_executable   
   ${catkin_LIBRARIES}

@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include <std_msgs/String.h>
 #include "visual_navigation_node_worklow.h"
+#include "ThreadPool/thread_pool.h"
 
 int main(int argc, char *argv[]){
     ros::init(argc, argv, "visual_navigation_node");

@@ -7,12 +7,17 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   message_filters
+  cv_bridge
 )
+
+find_package(OpenCV REQUIRED)
 
 include_directories(
 include
   ${catkin_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
 )
+
 
 add_executable(visual_navigation_executable 
               src/visual_navigation_node.cpp 
@@ -24,6 +29,7 @@ add_executable(visual_navigation_executable
               )
 target_link_libraries(visual_navigation_executable   
   ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
 )
 set_target_properties(visual_navigation_executable PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CATKIN_DEVEL_PREFIX}/lib/${PROJECT_NAME})
 install(TARGETS visual_navigation_executable

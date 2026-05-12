@@ -3,6 +3,7 @@
 
 void Managers::NavigationManager::initialize()
 {
+    good_points.clear();
     image_subscriber.emplace();
     imu_subscriber.emplace();
     range_subscriber.emplace();
@@ -12,6 +13,7 @@ void Managers::NavigationManager::initialize()
         image_subscriber->subscribe(node_handle, "/iris_visual_navigation/camera1/image_raw", 1);
         imu_subscriber->subscribe(node_handle, "/mavros/imu/data", 10);
         range_subscriber->subscribe(node_handle, "/range_down", 5);
+        vision_speed_publisher = node_handle.advertise<geometry_msgs::TwistStamped>("mavros/vision_speed/speed_twist", 10); 
 
         syncronizer = std::make_unique<message_filters::Synchronizer<MySyncPolicy>>(
             MySyncPolicy(100), *image_subscriber, *imu_subscriber, *range_subscriber
@@ -26,27 +28,47 @@ void Managers::NavigationManager::initialize()
 }
 
 void Managers::NavigationManager::synchronized_data_callback(const sensor_msgs::ImageConstPtr &img, const sensor_msgs::ImuConstPtr &imu, const sensor_msgs::RangeConstPtr &rng)
-{ 
+{
     cv::Mat frame = cv_bridge::toCvShare(img, "mono8")->image;
-    auto clahe_future = thread_pool.add_task([this, &frame](){ clahe_preprocessing(frame);});
-    clahe_future.get();
-    ROS_INFO("CLAHE PROCESSED");
-
-    ROS_INFO("GOOD POINTS SIZE %d", good_points.size());
-    auto points_future  = thread_pool.add_task([this, &frame](){ detect_new_features(frame, good_points);});
-    points_future.get();
-    
-    for (const auto& point : good_points) {
-        // Рисуем закрашенный круг
-        cv::circle(frame, 
-                   point,           // Центр точки
-                   3,               // Радиус
-                   cv::Scalar(0, 255, 0), // Цвет (B, G, R) - зеленый
-                   -1               // Толщина (-1 значит закрашенный)
-        );
+    cv::Mat vis_frame = frame.clone();
+    if(previous_frame.empty())
+    {
+        previous_frame = frame;
+        previous_time = img->header.stamp;
+        return;
     }
 
-    cv::imshow("Optical Flow Debug", frame);
+    if(!is_pipeline_enabled)
+        return;
+
+    auto clahe_future = thread_pool.add_task([this, &frame](){ clahe_preprocessing(frame);});
+    clahe_future.get();
+
+    if(good_points.empty())
+    {
+        auto points_future  = thread_pool.add_task([this, &frame](){ detect_new_features(frame, good_points);});
+        points_future.get();
+    }
+
+    double dt = (img->header.stamp - previous_time).toSec();
+    auto imu_predicting_future = thread_pool.add_task([this, &imu, dt](){ return predict_points_by_imu(this->good_points,imu,dt);});
+    auto imu_predicted_points = imu_predicting_future.get();
+
+    std::tie(good_points,imu_predicted_points) = calculate_lucas_kanade(previous_frame, frame, good_points, imu_predicted_points);
+    std::tie(good_points,imu_predicted_points) = ransac_filter(good_points, imu_predicted_points);
+    calculate_velocity(imu,good_points,imu_predicted_points,dt,rng->range);
+
+    previous_frame = frame.clone();
+    previous_time = img->header.stamp;
+    good_points = std::move(imu_predicted_points);
+
+    if(good_points.size() < 70)
+    {
+        auto points_future  = thread_pool.add_task([this, &frame](){ detect_new_features(frame, good_points);});
+        points_future.get();
+    }
+
+    cv::imshow("Optical Flow Debug", vis_frame);
     cv::waitKey(1); 
 }
 
@@ -60,7 +82,6 @@ bool Managers::NavigationManager::detect_new_features(const cv::Mat& img, std::v
     static thread_local std::size_t points_count = max_good_points;
     static thread_local std::vector<cv::Point2f> new_points(points_count);
     new_points.clear();
-    ROS_INFO("NEW POINTS SIZE BEFORE %d", new_points.size());
     if(pts.size() <  max_good_points)
     {
         cv::goodFeaturesToTrack(img, new_points, points_count - pts.size(), 0.01, 20);
@@ -69,3 +90,139 @@ bool Managers::NavigationManager::detect_new_features(const cv::Mat& img, std::v
     }
     return true;
 }
+
+std::pair<std::vector<cv::Point2f> &, std::vector<cv::Point2f> &> Managers::NavigationManager::calculate_lucas_kanade(const cv::Mat &previous_frame, const cv::Mat &current_frame, std::vector<cv::Point2f> &good_points, std::vector<cv::Point2f> &predicted_points)
+{
+    static std::vector<uchar> points_status{max_good_points};
+    static std::vector<float> points_error{max_good_points};
+
+    points_status.clear();
+    points_error.clear();
+
+    cv::calcOpticalFlowPyrLK(
+    previous_frame,     
+    current_frame,      
+    good_points,
+    predicted_points,  
+    points_status,          
+    points_error,       
+    cv::Size(21,21), 
+    3,               
+    cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 0.01),
+    cv::OPTFLOW_USE_INITIAL_FLOW 
+    );
+
+    ROS_INFO("POINTS SIZE BEFORE LUCAS %d", predicted_points.size());
+    good_points = filter_points(good_points,points_status);
+    predicted_points = filter_points(predicted_points,points_status);
+    ROS_INFO("POINTS SIZE AFTER LUCAS %d", predicted_points.size());
+    return {good_points, predicted_points};
+}
+
+std::vector<cv::Point2f> Managers::NavigationManager::predict_points_by_imu(const std::vector<cv::Point2f>& good_points, const sensor_msgs::ImuConstPtr& imu, double dt) 
+{
+    std::vector<cv::Point2f> predicted_pts;
+    const double f = 476.7;
+    float du = f * imu->angular_velocity.y * dt;
+    float dv = -f * imu->angular_velocity.x * dt;
+
+    predicted_pts.clear();
+    for (const auto& p : good_points)
+        predicted_pts.push_back(cv::Point2f(p.x + du, p.y + dv));
+    
+    return predicted_pts;
+}
+
+std::vector<cv::Point2f>& Managers::NavigationManager::filter_points(std::vector<cv::Point2f>& points, const std::vector<uchar>& mask) 
+{
+    auto points_write_it = points.begin();
+    auto points_read_it = points.begin();
+    auto mask_it = mask.begin();
+
+    for (; points_read_it != points.end(); points_read_it++, mask_it++) {
+        if (*mask_it) { // Если точка валидна (status или ransac_mask)
+            if (points_read_it != points_write_it) {
+                *points_write_it = std::move(*points_read_it);
+            }
+            ++points_write_it;
+        }
+    }
+    points.erase(points_write_it, points.end());
+    return points;
+}
+
+std::pair<std::vector<cv::Point2f>&, std::vector<cv::Point2f>&> Managers::NavigationManager::ransac_filter(std::vector<cv::Point2f>& good_points, std::vector<cv::Point2f>& predicted_points) 
+{
+    if (predicted_points.size() < 4) {
+        good_points.clear();
+        predicted_points.clear();
+        return {good_points, predicted_points};
+    }
+
+    static std::vector<uchar> ransac_mask;
+    ransac_mask.clear();
+
+    cv::findHomography(good_points, predicted_points, cv::RANSAC, 3.0, ransac_mask);
+
+    ROS_INFO("POINTS SIZE BEFORE RANSAC %d", predicted_points.size());
+    filter_points(good_points, ransac_mask);
+    filter_points(predicted_points, ransac_mask);
+    ROS_INFO("POINTS SIZE AFTER RANSAC %d", predicted_points.size());
+
+    return {good_points, predicted_points};
+}
+
+void Managers::NavigationManager::calculate_velocity(const sensor_msgs::ImuConstPtr& imu,const std::vector<cv::Point2f>& good_points, const std::vector<cv::Point2f>& predicted_points, double dt, double altitude) 
+{
+    if (good_points.size() < 25 || dt <= 0) {
+        return; 
+    }
+
+    float sum_du = 0;
+    float sum_dv = 0;
+    size_t n = good_points.size();
+
+    for (auto predicted_point = predicted_points.begin(), good_point = good_points.begin();
+        predicted_point != predicted_points.end() && good_point != good_points.end(); good_point++, predicted_point++) 
+    {
+        sum_du += (predicted_point->x - good_point->x);
+        sum_dv += (predicted_point->y - good_point->y);
+    }
+    float avg_du = sum_du / n; 
+    float avg_dv = sum_dv / n; 
+
+    const float f = 476.7f;
+    float du_imu = -f * (float)imu->angular_velocity.x * dt; 
+    float dv_imu = f * (float)imu->angular_velocity.y * dt;
+
+    float pure_trans_du = avg_du + du_imu;
+    float pure_trans_dv = avg_dv + dv_imu;
+
+    float vx_raw = (pure_trans_dv / f) * (altitude / dt);
+    float vy_raw = (pure_trans_du / f) * (altitude / dt);
+
+
+    if (std::abs(vx_raw) < 0.07) vx_raw = 0.0f;
+    if (std::abs(vy_raw) < 0.07) vy_raw = 0.0f;
+
+
+    static float filtered_vx = 0, filtered_vy = 0;
+    float alpha = 0.15f; 
+    filtered_vx = alpha * vx_raw + (1.0f - alpha) * filtered_vx;
+    filtered_vy = alpha * vy_raw + (1.0f - alpha) * filtered_vy;
+
+    geometry_msgs::TwistStamped visual_msg;
+    visual_msg.header.stamp = ros::Time::now();
+    visual_msg.header.frame_id = "base_link"; 
+    visual_msg.twist.linear.x = filtered_vx; 
+    visual_msg.twist.linear.y = filtered_vy;
+    visual_msg.twist.linear.z = 0.0;
+
+    vision_speed_publisher->publish(visual_msg);
+
+
+    ROS_INFO("Скорость: VX: %.2f, VY: %.2f | H: %.2f", filtered_vx, filtered_vy, altitude);
+    ROS_INFO("DU: %.2f | IMU_U: %.2f | DIFF: %.2f", avg_du, du_imu, pure_trans_du);
+    ROS_INFO("DV: %.2f | IMU_V: %.2f | DIFF: %.2f", avg_dv, dv_imu, pure_trans_dv);
+}
+

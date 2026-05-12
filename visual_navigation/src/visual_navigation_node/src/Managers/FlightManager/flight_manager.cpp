@@ -7,6 +7,7 @@ void Managers::FlightManager::initialize_position_sender()
 
     this->destination_position_publisher = node_handle.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10,this);
     this->current_position_subscriber = node_handle.subscribe<geometry_msgs::PoseStamped>("mavros/local_position/pose", 10, &FlightManager::current_position_callback,this);
+    this->destination_position_subscriber = node_handle.subscribe<geometry_msgs::PoseStamped>("uav_goal/position", 10, &FlightManager::destination_position_callback, this);
 
     offboard_timer = node_handle.createTimer(ros::Duration(0.05), &FlightManager::timer_callback, this);
 }
@@ -31,16 +32,14 @@ void Managers::FlightManager::disable_rc_control()
 
 void Managers::FlightManager::enable_offboard()
 {
-    if(!set_mode_client)
-    {
-        auto node_handle = VisualNavigationNodeWorkflow::node_handle();
-        set_mode_client = node_handle.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
-    }
+    auto node_handle = VisualNavigationNodeWorkflow::node_handle();
+    auto set_mode_client = node_handle.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
+
 
     mavros_msgs::SetMode offboard_set_mode;
     offboard_set_mode.request.custom_mode = "OFFBOARD";
 
-    if (set_mode_client-> call(offboard_set_mode) && offboard_set_mode.response.mode_sent) 
+    if (set_mode_client.call(offboard_set_mode) && offboard_set_mode.response.mode_sent) 
     {
         ROS_INFO("OFFBOARD ENABLED");
     } 
@@ -48,19 +47,31 @@ void Managers::FlightManager::enable_offboard()
     {
         ROS_ERROR("Не удалось отправить запрос на смену режима");
     }
+
+    auto client = VisualNavigationNodeWorkflow::node_handle().serviceClient<mavros_msgs::ParamSet>("/mavros/param/set");
+    mavros_msgs::ParamSet srv;
+
+    srv.request.param_id = "MPC_TILTMAX_AIR";
+    srv.request.value.real = 15.0; 
+    client.call(srv);
+
+    srv.request.param_id = "MPC_XY_VEL_MAX";
+    srv.request.value.real = 2.0;
+    client.call(srv);
+
+    srv.request.param_id = "MPC_ACC_HOR";
+    srv.request.value.real = 1.0;
+    client.call(srv);
 }
 
 void Managers::FlightManager::arm()
 {
-    if(!arming_client)
-    {
-        auto node_handle = VisualNavigationNodeWorkflow::node_handle();
-        arming_client = node_handle.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");
-    }
+    auto node_handle = VisualNavigationNodeWorkflow::node_handle();
+    auto arming_client = node_handle.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");
 
     mavros_msgs::CommandBool arming_command{};
     arming_command.request.value = true;
-    if(arming_client->call(arming_command) && arming_command.response.success){
+    if(arming_client.call(arming_command) && arming_command.response.success){
         ROS_INFO("ARMED");
     }
 }
@@ -159,6 +170,7 @@ void Managers::FlightManager::timer_callback(const ros::TimerEvent &event){
     sending_position.header.frame_id = "map" ;
     destination_position_publisher.publish(sending_position);
 
+
     if(!is_warmed_up)
     {
         if(sended_positions < 100)
@@ -166,8 +178,18 @@ void Managers::FlightManager::timer_callback(const ros::TimerEvent &event){
         else
         {
             is_warmed_up = true;
-             ROS_INFO("WARMED UP, SENDING EVENT");
+            ROS_INFO("WARMED UP, SENDING EVENT");
             this->event_queue.push_event(std::make_unique<PositionSenderCreatedEvent>());
         }
     }
+}
+
+void Managers::FlightManager::destination_position_callback(const geometry_msgs::PoseStampedConstPtr &msg)
+{
+    this->destination_position = *msg;
+    
+    ROS_INFO("-----------------------------------------------------------\nNew goal received: X: %.2f, Y: %.2f, Z: %.2f\n-----------------------------------------------------------\n", 
+             msg->pose.position.x, 
+             msg->pose.position.y, 
+             msg->pose.position.z);
 }

@@ -38,11 +38,13 @@ namespace Managers{
         void do_takeoff();
         
     private:
-        void initialize();
         void state_callback(const mavros_msgs::StateConstPtr& state_msg);
         void current_position_callback(const geometry_msgs::PoseStampedConstPtr& msg);
         void timer_callback(const ros::TimerEvent& event);
-        
+        void destination_position_callback(const geometry_msgs::PoseStampedConstPtr &msg);
+      
+    private:
+        void initialize();
         void initialize_position_sender();
         void disable_rc_control();
         void enable_offboard();
@@ -102,19 +104,18 @@ namespace Managers{
 
     private:
         ros::Subscriber state_subscriber{};
-        std::optional<mavros_msgs::State> current_state{std::nullopt};
 
         ros::Publisher destination_position_publisher;
         ros::Subscriber current_position_subscriber;
-        ros::Timer offboard_timer;
-
-        std::optional<geometry_msgs::PoseStamped> current_position; 
-        std::optional<geometry_msgs::PoseStamped> destination_position; 
-
-        std::optional<ros::ServiceClient> takeoff_client{};
-        std::optional<ros::ServiceClient> arming_client{};
-        std::optional<ros::ServiceClient> set_mode_client{};
+        ros::Subscriber destination_position_subscriber;
         
+        ros::Timer offboard_timer;
+        
+    private:
+        std::optional<geometry_msgs::PoseStamped> current_position{std::nullopt};
+        std::optional<geometry_msgs::PoseStamped> destination_position{std::nullopt}; 
+        std::optional<mavros_msgs::State> current_state{std::nullopt};
+
     private:
         static constexpr const uint8_t takeoff_altitude{10};
         static constexpr const float position_error{0.5};

@@ -30,29 +30,24 @@ void Managers::NavigationManager::initialize()
 void Managers::NavigationManager::synchronized_data_callback(const sensor_msgs::ImageConstPtr &img, const sensor_msgs::ImuConstPtr &imu, const sensor_msgs::RangeConstPtr &rng)
 {
     cv::Mat frame = cv_bridge::toCvShare(img, "mono8")->image;
-    cv::Mat vis_frame = frame.clone();
-    if(previous_frame.empty())
+    if(previous_frame.empty() || !is_pipeline_enabled)
     {
         previous_frame = frame;
         previous_time = img->header.stamp;
         return;
     }
 
-    if(!is_pipeline_enabled)
-        return;
-
     auto clahe_future = thread_pool.add_task([this, &frame](){ clahe_preprocessing(frame);});
-    clahe_future.get();
-
     if(good_points.empty())
     {
+        clahe_future.get();
         auto points_future  = thread_pool.add_task([this, &frame](){ detect_new_features(frame, good_points);});
         points_future.get();
+        return;
     }
 
     double dt = (img->header.stamp - previous_time).toSec();
-    auto imu_predicting_future = thread_pool.add_task([this, &imu, dt](){ return predict_points_by_imu(this->good_points,imu,dt);});
-    auto imu_predicted_points = imu_predicting_future.get();
+    auto imu_predicted_points = predict_points_by_imu(this->good_points,imu,dt);
 
     std::tie(good_points,imu_predicted_points) = calculate_lucas_kanade(previous_frame, frame, good_points, imu_predicted_points);
     std::tie(good_points,imu_predicted_points) = ransac_filter(good_points, imu_predicted_points);
@@ -64,12 +59,11 @@ void Managers::NavigationManager::synchronized_data_callback(const sensor_msgs::
 
     if(good_points.size() < 70)
     {
-        auto points_future  = thread_pool.add_task([this, &frame](){ detect_new_features(frame, good_points);});
+        clahe_future.get();
+        auto points_future  = thread_pool.add_task([this, &frame](){detect_new_features(frame, good_points);});
         points_future.get();
     }
-
-    cv::imshow("Optical Flow Debug", vis_frame);
-    cv::waitKey(1); 
+    
 }
 
 bool Managers::NavigationManager::clahe_preprocessing(cv::Mat& image){
@@ -140,7 +134,7 @@ std::vector<cv::Point2f>& Managers::NavigationManager::filter_points(std::vector
     auto mask_it = mask.begin();
 
     for (; points_read_it != points.end(); points_read_it++, mask_it++) {
-        if (*mask_it) { // Если точка валидна (status или ransac_mask)
+        if (*mask_it) { 
             if (points_read_it != points_write_it) {
                 *points_write_it = std::move(*points_read_it);
             }
@@ -219,7 +213,6 @@ void Managers::NavigationManager::calculate_velocity(const sensor_msgs::ImuConst
     visual_msg.twist.linear.z = 0.0;
 
     vision_speed_publisher->publish(visual_msg);
-
 
     ROS_INFO("Скорость: VX: %.2f, VY: %.2f | H: %.2f", filtered_vx, filtered_vy, altitude);
     ROS_INFO("DU: %.2f | IMU_U: %.2f | DIFF: %.2f", avg_du, du_imu, pure_trans_du);

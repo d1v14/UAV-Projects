@@ -29,6 +29,7 @@ void Managers::NavigationManager::initialize()
 
 void Managers::NavigationManager::synchronized_data_callback(const sensor_msgs::ImageConstPtr &img, const sensor_msgs::ImuConstPtr &imu, const sensor_msgs::RangeConstPtr &rng)
 {
+    static std::future<std::vector<cv::Point2f>> good_point_generating_done{};
     cv::Mat frame = cv_bridge::toCvShare(img, "mono8")->image;
     if(previous_frame.empty() || !is_pipeline_enabled)
     {
@@ -37,15 +38,23 @@ void Managers::NavigationManager::synchronized_data_callback(const sensor_msgs::
         return;
     }
 
-    auto clahe_future = thread_pool.add_task([this, &frame](){ clahe_preprocessing(frame);});
+    if(good_point_generating_done.valid())
+    {
+        if(good_point_generating_done.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+        {
+            std::vector<cv::Point2f> new_pts = good_point_generating_done.get();
+            good_points.insert(good_points.end(), new_pts.begin(), new_pts.end());
+            ROS_INFO("Merged %zu new points. Total: %zu", new_pts.size(), good_points.size());
+        }
+    }
+
     if(good_points.empty())
     {
-        clahe_future.get();
-        auto points_future  = thread_pool.add_task([this, &frame](){ detect_new_features(frame, good_points);});
-        points_future.get();
+        good_point_generating_done  = thread_pool.add_task([this, frame_clone = frame.clone()](){ return append_good_points_task(frame_clone, this->max_good_points);});
         return;
     }
 
+        
     double dt = (img->header.stamp - previous_time).toSec();
     auto imu_predicted_points = predict_points_by_imu(this->good_points,imu,dt);
 
@@ -57,13 +66,10 @@ void Managers::NavigationManager::synchronized_data_callback(const sensor_msgs::
     previous_time = img->header.stamp;
     good_points = std::move(imu_predicted_points);
 
-    if(good_points.size() < 70)
+    if(good_points.size() < 85 && !good_point_generating_done.valid())
     {
-        clahe_future.get();
-        auto points_future  = thread_pool.add_task([this, &frame](){detect_new_features(frame, good_points);});
-        points_future.get();
+        good_point_generating_done  = thread_pool.add_task([this, frame_clone = frame.clone()](){ return append_good_points_task(frame_clone, this->max_good_points - good_points.size());});
     }
-    
 }
 
 bool Managers::NavigationManager::clahe_preprocessing(cv::Mat& image){
@@ -72,17 +78,13 @@ bool Managers::NavigationManager::clahe_preprocessing(cv::Mat& image){
     return true;
 }
 
-bool Managers::NavigationManager::detect_new_features(const cv::Mat& img, std::vector<cv::Point2f>& pts){
+std::vector<cv::Point2f> Managers::NavigationManager::detect_new_features(const cv::Mat& img, std::size_t count){
     static thread_local std::size_t points_count = max_good_points;
     static thread_local std::vector<cv::Point2f> new_points(points_count);
     new_points.clear();
-    if(pts.size() <  max_good_points)
-    {
-        cv::goodFeaturesToTrack(img, new_points, points_count - pts.size(), 0.01, 20);
-        ROS_INFO("NEW POINTS SIZE AFTER %d", new_points.size());
-        pts.insert(pts.end(), new_points.begin(), new_points.end());
-    }
-    return true;
+    cv::goodFeaturesToTrack(img, new_points, count, 0.01, 20);
+    ROS_INFO("FOUND %d POINTS", new_points.size());
+    return new_points;
 }
 
 std::pair<std::vector<cv::Point2f> &, std::vector<cv::Point2f> &> Managers::NavigationManager::calculate_lucas_kanade(const cv::Mat &previous_frame, const cv::Mat &current_frame, std::vector<cv::Point2f> &good_points, std::vector<cv::Point2f> &predicted_points)
@@ -219,3 +221,8 @@ void Managers::NavigationManager::calculate_velocity(const sensor_msgs::ImuConst
     ROS_INFO("DV: %.2f | IMU_V: %.2f | DIFF: %.2f", avg_dv, dv_imu, pure_trans_dv);
 }
 
+std::vector<cv::Point2f> Managers::NavigationManager::append_good_points_task(cv::Mat img, std::size_t count)
+{
+    clahe_preprocessing(img);
+    return detect_new_features(img,count);
+}
